@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dr. Andreas Dictation"/>
+<meta name="theme-color" content="#0f172a"/>
+<meta name="description" content="Speech-to-Text mit Rückspul und Übersetzung - offline verfügbar"/>
+<title>Dr. Andreas Dictation PRO - Speech to Text</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--safe-top:env(safe-area-inset-top);--safe-bot:env(safe-area-inset-bottom)}
+body{font-family:'Segoe UI',-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;
+  padding:calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bot));overscroll-behavior:none}
+#app{max-width:800px;margin:0 auto}
+
+.hdr{text-align:center;margin-bottom:20px}
+.hdr small{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase}
+.hdr h1{font-size:22px;font-weight:700;color:#f1f5f9;margin:4px 0;line-height:1.3}
+.hdr .subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+.badges{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.badge{font-size:11px;background:#1e293b;border:1px solid #334155;padding:3px 9px;border-radius:20px;color:#94a3b8}
+.badge.green{border-color:#166534;color:#4ade80;background:#052e16}
+
+/* Microphone Button */
+.mic-container{text-align:center;margin:30px 0}
+.mic-btn{
+  width:120px;height:120px;border-radius:50%;border:3px solid #3b82f6;
+  background:#172554;color:#60a5fa;font-size:48px;cursor:pointer;
+  transition:all 0.3s;display:inline-flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;font-weight:700
+}
+.mic-btn:hover:not(.recording){background:#1d4ed8;transform:scale(1.05)}
+.mic-btn.recording{background:#dc2626;border-color:#ef4444;color:#fca5a5;animation:pulse 0.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,0.7)}70%{box-shadow:0 0 0 20px rgba(220,38,38,0)}}
+
+.status{text-align:center;margin:15px 0;font-size:13px;color:#94a3b8}
+.status.listening{color:#4ade80;font-weight:600}
+.status.error{color:#fca5a5;font-weight:600}
+
+/* Timeline Rewind */
+.timeline-section{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:15px;margin:20px 0}
+.timeline-label{font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:10px;font-weight:600}
+.timeline-display{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.timeline-time{font-size:13px;color:#4ade80;font-weight:700}
+.timeline-bar{width:100%;height:6px;background:#0f172a;border-radius:3px;margin-bottom:10px;overflow:hidden}
+.timeline-fill{height:100%;background:#3b82f6;border-radius:3px;width:0%;transition:width 0.1s}
+
+.timeline-controls{display:flex;gap:8px;align-items:center}
+.timeline-btn{padding:6px 12px;border-radius:6px;background:#3b82f6;color:#fff;border:none;
+  cursor:pointer;font-size:12px;font-weight:600;transition:all 0.15s}
+.timeline-btn:hover{background:#2563eb}
+.timeline-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* Text Area */
+.text-container{margin:30px 0}
+.text-label{font-size:12px;color:#64748b;text-transform:uppercase;margin-bottom:8px}
+textarea{
+  width:100%;min-height:200px;padding:16px;font-size:14px;
+  border-radius:10px;background:#1e293b;border:1px solid #334155;
+  color:#f1f5f9;font-family:inherit;resize:vertical;
+  -webkit-appearance:none;outline:none
+}
+textarea:focus{border-color:#3b82f6}
+
+.btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{padding:10px 16px;border-radius:8px;border:none;background:#3b82f6;
+  color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s;
+  -webkit-appearance:none;flex:1;min-width:80px
+}
+.btn:hover:not(:disabled){background:#2563eb;transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn.secondary{background:#1e293b;border:1px solid #334155;color:#94a3b8}
+.btn.secondary:hover{background:#334155}
+.btn.danger{background:#dc2626}
+.btn.danger:hover{background:#991b1b}
+.btn.success{background:#16a34a}
+.btn.success:hover{background:#15803d}
+.btn.translate{background:#8b5cf6}
+.btn.translate:hover{background:#7c3aed}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+
+.auto-save-info{margin-top:12px;padding:10px;background:#052e16;border:1px solid #166534;
+  border-radius:8px;font-size:11px;color:#4ade80}
+
+/* Translation Section */
+.translation-section{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:15px;margin:20px 0}
+.translation-header{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.translation-header select{padding:8px 12px;border-radius:6px;background:#0f172a;
+  border:1px solid #334155;color:#94a3b8;font-size:12px;-webkit-appearance:none;cursor:pointer}
+.translation-output{background:#0f172a;border:1px solid #334155;border-radius:8px;
+  padding:12px;min-height:100px;color:#cbd5e1;font-size:13px;line-height:1.5;
+  word-break:break-word}
+.translation-empty{color:#475569;font-style:italic}
+
+/* History */
+.history-section{margin-top:40px}
+.history-title{font-size:13px;color:#64748b;text-transform:uppercase;margin-bottom:12px;font-weight:600}
+.history-list{display:flex;flex-direction:column;gap:8px}
+.history-item{
+  background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;
+  display:flex;justify-content:space-between;align-items:center;gap:8px
+}
+.history-text{flex:1;font-size:12px;color:#cbd5e1;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2}
+.history-time{font-size:10px;color:#64748b}
+.history-actions{display:flex;gap:6px}
+.history-btn{padding:6px 10px;border-radius:6px;background:#172554;color:#60a5fa;
+  border:none;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.15s}
+.history-btn:hover{background:#1d4ed8}
+
+.empty-history{text-align:center;color:#475569;font-size:12px;padding:20px}
+
+.footer{text-align:center;margin-top:40px;font-size:10px;color:#334155;line-height:1.6}
+
+.info-box{background:#052e16;border:1px solid #166534;border-radius:10px;padding:12px;
+  margin:20px 0;font-size:12px;color:#4ade80}
+
+@media (max-width:600px){
+  .mic-btn{width:100px;height:100px;font-size:40px}
+  textarea{min-height:150px}
+  .btn{min-width:70px;font-size:12px;padding:8px 12px}
+  .timeline-controls{flex-direction:column}
+  .timeline-btn{width:100%}
+}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <small>PWA PRO · Speech-to-Text · Rückspul + Übersetzung</small>
+    <h1>Dr. Andreas<br>Dictation PRO</h1>
+    <div class="subtitle">Medical Voice Documentation with Rewind</div>
+    <div class="badges">
+      <span class="badge green">✅ Timeline Rewind</span>
+      <span class="badge green">✅ Auto Translate</span>
+    </div>
+  </div>
+
+  <div class="info-box">
+    🎙️ Sprechen → Text wird erfasst. Mit Rückspul bis 1 Minute zurück + Live-Übersetzung!
+  </div>
+
+  <!-- Microphone -->
+
+  <div class="mic-container">
+    <button id="micBtn" class="mic-btn" title="Click to speak">🎤</button>
+  </div>
+
+  <div class="status" id="status">Ready to listen</div>
+
+  <!-- Timeline Rewind -->
+
+  <div class="timeline-section">
+    <div class="timeline-label">⏮️ Timeline Rewind (bis 1 Minute zurück)</div>
+    <div class="timeline-display">
+      <div>
+        <div class="timeline-time" id="rewindTime">0:00</div>
+        <div class="timeline-bar">
+          <div class="timeline-fill" id="timelineFill"></div>
+        </div>
+      </div>
+    </div>
+    <div class="timeline-controls">
+      <button class="timeline-btn" id="rewindMinusBtn" disabled>⏪ -10s</button>
+      <button class="timeline-btn" id="rewindPlusBtn" disabled>+10s ⏩</button>
+      <button class="timeline-btn danger" id="resetRewindBtn" disabled>🔄 Reset</button>
+    </div>
+  </div>
+
+  <!-- Text Area -->
+
+  <div class="text-container">
+    <div class="text-label">Erkannter Text (Deutsch)</div>
+    <textarea id="textArea" placeholder="Your dictation will appear here..."></textarea>
+
+```
+<div class="btn-row">
+  <button class="btn danger" id="stopBtn" style="display:none">⏹️ Stop</button>
+  <button class="btn success" id="copyBtn">📋 Copy</button>
+  <button class="btn secondary" id="clearBtn">🗑️ Clear</button>
+  <button class="btn secondary" id="downloadBtn">⬇️ Download</button>
+</div>
+
+<div class="auto-save-info">
+  💾 Auto-saving... | <span id="autoSaveStatus">Ready</span>
+</div>
+```
+
+  </div>
+
+  <!-- Language Selection -->
+
+  <div class="text-container">
+    <div class="text-label">Recording Language</div>
+    <select id="langSelect" style="width:100%;padding:10px 12px;border-radius:8px;background:#1e293b;
+      border:1px solid #334155;color:#f1f5f9;font-size:13px;-webkit-appearance:none;cursor:pointer">
+      <option value="de-AT">🇦🇹 Deutsch (Österreich)</option>
+      <option value="de-DE">🇩🇪 Deutsch (Deutschland)</option>
+      <option value="en-US">🇺🇸 English (USA)</option>
+      <option value="en-GB">🇬🇧 English (UK)</option>
+      <option value="it-IT">🇮🇹 Italiano</option>
+      <option value="fr-FR">🇫🇷 Français</option>
+    </select>
+  </div>
+
+  <!-- Translation Section -->
+
+  <div class="translation-section">
+    <div class="timeline-label">🌐 Live Übersetzung</div>
+    <div class="translation-header">
+      <button class="btn translate" id="translateBtn" style="flex:1">🔄 Übersetzen nach:</button>
+      <select id="translateLang" style="padding:8px 12px;border-radius:6px;background:#0f172a;
+        border:1px solid #334155;color:#94a3b8;font-size:12px;-webkit-appearance:none;cursor:pointer">
+        <option value="en">🇬🇧 English</option>
+        <option value="it">🇮🇹 Italiano</option>
+        <option value="fr">🇫🇷 Français</option>
+        <option value="es">🇪🇸 Español</option>
+        <option value="pt">🇵🇹 Português</option>
+        <option value="nl">🇳🇱 Nederlands</option>
+        <option value="pl">🇵🇱 Polski</option>
+        <option value="ru">🇷🇺 Русский</option>
+        <option value="ja">🇯🇵 日本語</option>
+        <option value="zh">🇨🇳 中文</option>
+      </select>
+    </div>
+    <div class="translation-output" id="translationOutput">
+      <div class="translation-empty">Translation will appear here...</div>
+    </div>
+  </div>
+
+  <!-- History -->
+
+  <div class="history-section">
+    <div class="history-title">📝 Saved Dictations (Auto-saved)</div>
+    <div class="history-list" id="historyList">
+      <div class="empty-history">No saved dictations yet</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>Dr. Andreas – Medical Practice Austria</strong><br>
+    For documentation support only. Not a substitute for official medical records.<br>
+    Speech Recognition powered by Web Speech API | Translation by MyMemory API
+  </div>
+</div>
+
+<script>
+const micBtn = document.getElementById('micBtn');
+const stopBtn = document.getElementById('stopBtn');
+const textArea = document.getElementById('textArea');
+const copyBtn = document.getElementById('copyBtn');
+const clearBtn = document.getElementById('clearBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const translateBtn = document.getElementById('translateBtn');
+const translateLang = document.getElementById('translateLang');
+const translationOutput = document.getElementById('translationOutput');
+const langSelect = document.getElementById('langSelect');
+const statusEl = document.getElementById('status');
+const autoSaveStatus = document.getElementById('autoSaveStatus');
+
+// Timeline Rewind
+const rewindMinusBtn = document.getElementById('rewindMinusBtn');
+const rewindPlusBtn = document.getElementById('rewindPlusBtn');
+const resetRewindBtn = document.getElementById('resetRewindBtn');
+const rewindTime = document.getElementById('rewindTime');
+const timelineFill = document.getElementById('timelineFill');
+
+let recognition = null;
+let isListening = false;
+let finalTranscript = '';
+let history = JSON.parse(localStorage.getItem('dictationHistory') || '[]');
+
+// Timeline Stack - speichert Text-Änderungen mit Timestamps
+let timelineStack = [];
+let currentRewindIndex = -1;
+let recordingStartTime = null;
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  
+  micBtn.disabled = false;
+  
+  recognition.onstart = () => {
+    isListening = true;
+    recordingStartTime = Date.now();
+    timelineStack = [];
+    currentRewindIndex = -1;
+    micBtn.classList.add('recording');
+    stopBtn.style.display = 'block';
+    statusEl.textContent = '🎤 Listening...';
+    statusEl.classList.add('listening');
+    rewindMinusBtn.disabled = true;
+    rewindPlusBtn.disabled = true;
+    resetRewindBtn.disabled = true;
+  };
+  
+  recognition.onresult = (event) => {
+    let interimTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + ' ';
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    
+    const newText = finalTranscript + interimTranscript;
+    textArea.value = newText;
+    
+    // Add to timeline stack
+    if (newText !== (timelineStack[timelineStack.length - 1]?.text || '')) {
+      timelineStack.push({
+        text: newText,
+        timestamp: Date.now(),
+        elapsed: Math.floor((Date.now() - recordingStartTime) / 1000)
+      });
+      
+      // Keep only last 60 seconds
+      const minTime = Date.now() - 60000;
+      timelineStack = timelineStack.filter(s => s.timestamp >= minTime);
+      
+      updateTimeline();
+    }
+    
+    autoSave();
+  };
+  
+  recognition.onerror = (event) => {
+    statusEl.textContent = `❌ Error: ${event.error}`;
+    statusEl.classList.add('error');
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    micBtn.classList.remove('recording');
+    stopBtn.style.display = 'none';
+    statusEl.textContent = '✅ Done listening';
+    statusEl.classList.remove('listening');
+    
+    if (timelineStack.length > 0) {
+      rewindMinusBtn.disabled = false;
+      rewindPlusBtn.disabled = false;
+      resetRewindBtn.disabled = false;
+    }
+    
+    if (finalTranscript.trim()) {
+      saveToHistory(finalTranscript.trim());
+    }
+  };
+} else {
+  statusEl.textContent = '❌ Speech Recognition not supported';
+  statusEl.classList.add('error');
+  micBtn.disabled = true;
+}
+
+// Timeline Functions
+function updateTimeline() {
+  if (timelineStack.length === 0) return;
+  
+  const maxElapsed = 60;
+  const lastElapsed = timelineStack[timelineStack.length - 1]?.elapsed || 0;
+  const fillPercent = Math.min((lastElapsed / maxElapsed) * 100, 100);
+  
+  timelineFill.style.width = fillPercent + '%';
+  rewindTime.textContent = formatTime(lastElapsed);
+}
+
+function formatTime(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+rewindMinusBtn.addEventListener('click', () => {
+  if (currentRewindIndex === -1) {
+    currentRewindIndex = timelineStack.length - 1;
+  }
+  
+  if (currentRewindIndex > 0) {
+    currentRewindIndex -= 1;
+    applyRewind();
+  }
+});
+
+rewindPlusBtn.addEventListener('click', () => {
+  if (currentRewindIndex < timelineStack.length - 1) {
+    currentRewindIndex += 1;
+    applyRewind();
+  }
+});
+
+resetRewindBtn.addEventListener('click', () => {
+  currentRewindIndex = -1;
+  textArea.value = finalTranscript;
+  updateTimeline();
+});
+
+function applyRewind() {
+  if (currentRewindIndex >= 0 && currentRewindIndex < timelineStack.length) {
+    const state = timelineStack[currentRewindIndex];
+    textArea.value = state.text;
+    finalTranscript = state.text;
+    rewindTime.textContent = formatTime(state.elapsed);
+  }
+}
+
+// Button Controls
+micBtn.addEventListener('click', () => {
+  if (!recognition) return;
+  if (isListening) {
+    recognition.stop();
+  } else {
+    finalTranscript = '';
+    textArea.value = '';
+    recognition.language = langSelect.value;
+    recognition.start();
+  }
+});
+
+stopBtn.addEventListener('click', () => {
+  if (recognition) {
+    recognition.stop();
+  }
+});
+
+copyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(textArea.value).then(() => {
+    const orig = copyBtn.textContent;
+    copyBtn.textContent = '✓ Copied!';
+    setTimeout(() => {
+      copyBtn.textContent = orig;
+    }, 1500);
+  });
+});
+
+clearBtn.addEventListener('click', () => {
+  if (confirm('Clear all text?')) {
+    textArea.value = '';
+    finalTranscript = '';
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  const text = textArea.value;
+  if (!text) return;
+  
+  const blob = new Blob([text], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dictation-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// Translation
+translateBtn.addEventListener('click', async () => {
+  const text = textArea.value.trim();
+  if (!text) {
+    translationOutput.innerHTML = '<div class="translation-empty">No text to translate</div>';
+    return;
+  }
+  
+  const targetLang = translateLang.value;
+  translationOutput.innerHTML = '<div style="color:#60a5fa">🔄 Translating...</div>';
+  
+  try {
+    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=de|${targetLang}`);
+    const data = await response.json();
+    
+    if (data.responseStatus === 200) {
+      translationOutput.innerHTML = data.responseData.translatedText;
+    } else {
+      translationOutput.innerHTML = '<div class="translation-empty">❌ Translation failed</div>';
+    }
+  } catch (e) {
+    translationOutput.innerHTML = '<div class="translation-empty">❌ Network error. Check your connection.</div>';
+  }
+});
+
+langSelect.addEventListener('change', () => {
+  if (recognition && !isListening) {
+    recognition.language = langSelect.value;
+  }
+});
+
+// Auto-Save
+function autoSave() {
+  autoSaveStatus.textContent = `Last saved: ${new Date().toLocaleTimeString('de-AT')}`;
+}
+
+// History Management
+function saveToHistory(text) {
+  history.unshift({
+    text: text.substring(0, 300),
+    fullText: text,
+    date: new Date().toLocaleString('de-AT')
+  });
+  history = history.slice(0, 50);
+  localStorage.setItem('dictationHistory', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const historyList = document.getElementById('historyList');
+  if (history.length === 0) {
+    historyList.innerHTML = '<div class="empty-history">No saved dictations yet</div>';
+    return;
+  }
+  
+  historyList.innerHTML = history.map((item, idx) => `
+    <div class="history-item">
+      <div style="flex:1">
+        <div class="history-text">${item.fullText}</div>
+        <div class="history-time">${item.date}</div>
+      </div>
+      <div class="history-actions">
+        <button class="history-btn" onclick="useHistory(${idx})">📋 Use</button>
+        <button class="history-btn" onclick="deleteHistory(${idx})">🗑️</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.useHistory = (idx) => {
+  textArea.value = history[idx].fullText;
+  finalTranscript = history[idx].fullText + ' ';
+};
+
+window.deleteHistory = (idx) => {
+  if (confirm('Delete this dictation?')) {
+    history.splice(idx, 1);
+    localStorage.setItem('dictationHistory', JSON.stringify(history));
+    renderHistory();
+  }
+};
+
+// PWA Setup
+(function setupPWA() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 512;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0,0,512,512);
+  ctx.fillStyle = '#8b5cf6';
+  ctx.beginPath();
+  ctx.roundRect(40,40,432,432,80);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 100px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🎤', 256, 256);
+  const iconUrl = cv.toDataURL('image/png');
+  
+  const lnk = document.createElement('link');
+  lnk.rel = 'apple-touch-icon';
+  lnk.href = iconUrl;
+  document.head.appendChild(lnk);
+  
+  const manifest = {
+    name: 'Dr. Andreas Dictation PRO - Speech to Text with Rewind',
+    short_name: 'Dr. Dictation PRO',
+    description: 'Medical voice documentation with timeline rewind and translation',
+    start_url: './',
+    display: 'standalone',
+    background_color: '#0f172a',
+    theme_color: '#0f172a',
+    icons: [{src: iconUrl, sizes: '512x512', type: 'image/png'}]
+  };
+  
+  const mBlob = new Blob([JSON.stringify(manifest)], {type: 'application/manifest+json'});
+  const mUrl = URL.createObjectURL(mBlob);
+  const mLink = document.createElement('link');
+  mLink.rel = 'manifest';
+  mLink.href = mUrl;
+  document.head.appendChild(mLink);
+  
+  if ('serviceWorker' in navigator) {
+    const swCode = `const CACHE='dictation-pro-v1';self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./'])));self.skipWaiting()});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim()});self.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)))});`;
+    const swBlob = new Blob([swCode], {type: 'application/javascript'});
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  }
+})();
+
+renderHistory();
+</script>
+
+</body>
+</html>
