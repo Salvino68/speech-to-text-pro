@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dr. Andreas Dictation"/>
+<meta name="theme-color" content="#0f172a"/>
+<meta name="description" content="Speech-to-Text mit Übersetzung + Text-to-Speech"/>
+<title>Dr. Andreas Dictation - Speech to Text + Translate</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--safe-top:env(safe-area-inset-top);--safe-bot:env(safe-area-inset-bottom)}
+body{font-family:'Segoe UI',-apple-system,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;
+  padding:calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bot));overscroll-behavior:none}
+#app{max-width:800px;margin:0 auto}
+
+.hdr{text-align:center;margin-bottom:20px}
+.hdr small{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase}
+.hdr h1{font-size:22px;font-weight:700;color:#f1f5f9;margin:4px 0;line-height:1.3}
+.hdr .subtitle{font-size:13px;color:#94a3b8;margin-top:2px}
+.badges{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+.badge{font-size:11px;background:#1e293b;border:1px solid #334155;padding:3px 9px;border-radius:20px;color:#94a3b8}
+.badge.green{border-color:#166534;color:#4ade80;background:#052e16}
+
+/* Microphone Button */
+.mic-container{text-align:center;margin:30px 0}
+.mic-btn{
+  width:120px;height:120px;border-radius:50%;border:3px solid #3b82f6;
+  background:#172554;color:#60a5fa;font-size:48px;cursor:pointer;
+  transition:all 0.3s;display:inline-flex;align-items:center;justify-content:center;
+  -webkit-appearance:none;font-weight:700
+}
+.mic-btn:hover:not(.recording){background:#1d4ed8;transform:scale(1.05)}
+.mic-btn.recording{background:#dc2626;border-color:#ef4444;color:#fca5a5;animation:pulse 0.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(220,38,38,0.7)}70%{box-shadow:0 0 0 20px rgba(220,38,38,0)}}
+
+.status{text-align:center;margin:15px 0;font-size:13px;color:#94a3b8}
+.status.listening{color:#4ade80;font-weight:600}
+.status.speaking{color:#60a5fa;font-weight:600}
+.status.translating{color:#f59e0b;font-weight:600}
+.status.error{color:#fca5a5;font-weight:600}
+
+/* Text Area */
+.text-container{margin:30px 0}
+.text-label{font-size:12px;color:#64748b;text-transform:uppercase;margin-bottom:8px}
+textarea{
+  width:100%;min-height:120px;padding:16px;font-size:14px;
+  border-radius:10px;background:#1e293b;border:1px solid #334155;
+  color:#f1f5f9;font-family:inherit;resize:vertical;
+  -webkit-appearance:none;outline:none
+}
+textarea:focus{border-color:#3b82f6}
+
+.btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{padding:10px 16px;border-radius:8px;border:none;background:#3b82f6;
+  color:#fff;cursor:pointer;font-size:13px;font-weight:600;transition:all 0.15s;
+  -webkit-appearance:none;flex:1;min-width:80px
+}
+.btn:hover:not(:disabled){background:#2563eb;transform:translateY(-1px)}
+.btn:active:not(:disabled){transform:translateY(0)}
+.btn.secondary{background:#1e293b;border:1px solid #334155;color:#94a3b8}
+.btn.secondary:hover{background:#334155}
+.btn.danger{background:#dc2626}
+.btn.danger:hover{background:#991b1b}
+.btn.success{background:#16a34a}
+.btn.success:hover{background:#15803d}
+.btn.purple{background:#9333ea}
+.btn.purple:hover{background:#7e22ce}
+.btn.orange{background:#f59e0b}
+.btn.orange:hover{background:#d97706}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+
+.text-section{margin:25px 0;padding:15px;background:#1e293b;border:1px solid #334155;border-radius:10px}
+.text-section-label{font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;font-weight:600}
+.text-section-content{font-size:13px;color:#cbd5e1;line-height:1.6;min-height:80px;padding:10px;background:#0f172a;border-radius:8px;border:1px dashed #334155;white-space:pre-wrap;word-break:break-word}
+
+.lang-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:15px 0}
+.lang-setting{display:flex;flex-direction:column}
+.lang-setting label{font-size:11px;color:#94a3b8;margin-bottom:6px;font-weight:600}
+select{width:100%;padding:10px 12px;border-radius:8px;background:#1e293b;
+  border:1px solid #334155;color:#f1f5f9;font-size:13px;-webkit-appearance:none;cursor:pointer}
+select:focus{border-color:#3b82f6}
+
+.loading{display:inline-block;width:14px;height:14px;border:2px solid #94a3b8;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.6s linear infinite;margin-left:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.auto-save-info{margin-top:12px;padding:10px;background:#052e16;border:1px solid #166534;border-radius:8px;font-size:11px;color:#4ade80}
+
+/* History */
+.history-section{margin-top:40px}
+.history-title{font-size:13px;color:#64748b;text-transform:uppercase;margin-bottom:12px;font-weight:600}
+.history-list{display:flex;flex-direction:column;gap:8px}
+.history-item{
+  background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px 14px;
+}
+.history-text{font-size:12px;color:#cbd5e1;line-height:1.4;margin-bottom:6px}
+.history-time{font-size:10px;color:#64748b}
+
+.empty-history{text-align:center;color:#475569;font-size:12px;padding:20px}
+
+.footer{text-align:center;margin-top:40px;font-size:10px;color:#334155;line-height:1.6}
+
+.info-box{background:#052e16;border:1px solid #166534;border-radius:10px;padding:12px;
+  margin:20px 0;font-size:12px;color:#4ade80}
+
+@media (max-width:600px){
+  .mic-btn{width:100px;height:100px;font-size:40px}
+  .lang-settings{grid-template-columns:1fr}
+  .text-section-content{min-height:60px}
+}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <div class="hdr">
+    <small>PWA · Speech-to-Text + TRANSLATION · Offline-Ready</small>
+    <h1>Dr. Andreas<br>Dictation</h1>
+    <div class="subtitle">Medical Voice Documentation with Translation</div>
+    <div class="badges">
+      <span class="badge">🎤 Speech Recognition</span>
+      <span class="badge">🌐 Translation</span>
+      <span class="badge">🔊 Text-to-Speech</span>
+      <span class="badge green">✅ Ready</span>
+    </div>
+  </div>
+
+  <div class="info-box">
+    🎙️ Sprich → Text wird erkannt & automatisch übersetzt → Vorlesen! Rumänisch & mehr!
+  </div>
+
+  <!-- Microphone -->
+
+  <div class="mic-container">
+    <button id="micBtn" class="mic-btn" title="Click to speak">🎤</button>
+  </div>
+
+  <div class="status" id="status">Ready to listen</div>
+
+  <!-- Original Text -->
+
+  <div class="text-section">
+    <div class="text-section-label">🎤 Original Text (Recognized)</div>
+    <div class="text-section-content" id="originalText">Click mic and speak...</div>
+  </div>
+
+  <!-- Translated Text -->
+
+  <div class="text-section">
+    <div class="text-section-label">🌐 Translated Text <span id="translatingSpinner" style="display:none" class="loading"></span></div>
+    <div class="text-section-content" id="translatedText">Translation will appear here...</div>
+  </div>
+
+  <!-- Controls -->
+
+  <div class="btn-row">
+    <button class="btn danger" id="stopBtn" style="display:none">⏹️ Stop Recording</button>
+    <button class="btn" id="undoBtn">↶ Undo Last Word</button>
+    <button class="btn purple" id="speakBtn">🔊 Read Aloud</button>
+    <button class="btn success" id="copyBtn">📋 Copy</button>
+  </div>
+
+  <div class="btn-row" style="margin-top:8px">
+    <button class="btn secondary" id="clearBtn">🗑️ Clear</button>
+    <button class="btn secondary" id="downloadBtn">⬇️ Download</button>
+  </div>
+
+  <div class="auto-save-info">
+    💾 Auto-saving to history... | <span id="autoSaveStatus">Last saved: never</span>
+  </div>
+
+  <!-- Language Selection -->
+
+  <div style="margin:30px 0;padding:15px;background:#1e293b;border:1px solid #334155;border-radius:10px">
+    <div class="lang-settings">
+      <div class="lang-setting">
+        <label>🎤 Speech Input Language</label>
+        <select id="inputLangSelect">
+          <option value="de">🇦🇹 Deutsch</option>
+          <option value="ro">🇷🇴 Română</option>
+          <option value="pt">🇵🇹 Português</option>
+          <option value="en">🇺🇸 English</option>
+          <option value="it">🇮🇹 Italiano</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="es">🇪🇸 Español</option>
+        </select>
+      </div>
+
+```
+  <div class="lang-setting">
+    <label>🌐 Translate To</label>
+    <select id="translateLangSelect">
+      <option value="de">🇦🇹 Deutsch</option>
+      <option value="ro">🇷🇴 Română</option>
+      <option value="pt">🇵🇹 Português</option>
+      <option value="en">🇺🇸 English</option>
+      <option value="it">🇮🇹 Italiano</option>
+      <option value="fr">🇫🇷 Français</option>
+      <option value="es">🇪🇸 Español</option>
+    </select>
+  </div>
+
+  <div class="lang-setting">
+    <label>🔊 Speak In</label>
+    <select id="speakLangSelect">
+      <option value="de-AT">🇦🇹 Deutsch (AT)</option>
+      <option value="ro-RO">🇷🇴 Română</option>
+      <option value="pt-PT">🇵🇹 Português</option>
+      <option value="en-US">🇺🇸 English</option>
+      <option value="it-IT">🇮🇹 Italiano</option>
+      <option value="fr-FR">🇫🇷 Français</option>
+      <option value="es-ES">🇪🇸 Español</option>
+    </select>
+  </div>
+</div>
+```
+
+  </div>
+
+  <!-- History -->
+
+  <div class="history-section">
+    <div class="history-title">📝 Saved Dictations (Auto-saved)</div>
+    <div class="history-list" id="historyList">
+      <div class="empty-history">No saved dictations yet</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>Dr. Andreas – Medical Practice Austria</strong><br>
+    Speech Recognition & Translation powered by Web APIs<br>
+    Translation by MyMemory (free, no API key needed)
+  </div>
+</div>
+
+<script>
+const micBtn = document.getElementById('micBtn');
+const stopBtn = document.getElementById('stopBtn');
+const originalText = document.getElementById('originalText');
+const translatedText = document.getElementById('translatedText');
+const copyBtn = document.getElementById('copyBtn');
+const clearBtn = document.getElementById('clearBtn');
+const downloadBtn = document.getElementById('downloadBtn');
+const undoBtn = document.getElementById('undoBtn');
+const speakBtn = document.getElementById('speakBtn');
+const inputLangSelect = document.getElementById('inputLangSelect');
+const translateLangSelect = document.getElementById('translateLangSelect');
+const speakLangSelect = document.getElementById('speakLangSelect');
+const statusEl = document.getElementById('status');
+const autoSaveStatus = document.getElementById('autoSaveStatus');
+const translatingSpinner = document.getElementById('translatingSpinner');
+
+let recognition = null;
+let isListening = false;
+let finalTranscript = '';
+let currentTranslation = '';
+let history = JSON.parse(localStorage.getItem('dictationHistory') || '[]');
+let lastSaveTime = null;
+let isSpeaking = false;
+
+// Language code mapping for speech recognition
+const langCodeMap = {
+  'de': 'de-AT',
+  'ro': 'ro-RO',
+  'pt': 'pt-PT',
+  'en': 'en-US',
+  'it': 'it-IT',
+  'fr': 'fr-FR',
+  'es': 'es-ES'
+};
+
+// MyMemory Translation API
+async function translateText(text, sourceLang, targetLang) {
+  if (!text.trim() || sourceLang === targetLang) {
+    return text;
+  }
+  
+  translatingSpinner.style.display = 'inline-block';
+  statusEl.textContent = '🌐 Translating...';
+  statusEl.classList.add('translating');
+  
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.responseStatus === 200) {
+      currentTranslation = data.responseData.translatedText;
+      translatedText.textContent = currentTranslation;
+      statusEl.textContent = '✅ Translation complete';
+    } else {
+      translatedText.textContent = '❌ Translation error. Using original text.';
+      currentTranslation = text;
+      statusEl.textContent = '⚠️ Translation failed';
+    }
+  } catch (e) {
+    translatedText.textContent = '❌ No internet connection for translation. Using original.';
+    currentTranslation = text;
+    statusEl.textContent = '⚠️ Offline mode';
+  }
+  
+  translatingSpinner.style.display = 'none';
+}
+
+// Speech Recognition Setup
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechRecognition) {
+  recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  
+  recognition.onstart = () => {
+    isListening = true;
+    micBtn.classList.add('recording');
+    stopBtn.style.display = 'block';
+    statusEl.textContent = '🎤 Listening... (Click Stop to finish)';
+    statusEl.classList.add('listening');
+  };
+  
+  recognition.onresult = (event) => {
+    let interimTranscript = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript + ' ';
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    originalText.textContent = finalTranscript + interimTranscript;
+    autoSave();
+  };
+  
+  recognition.onerror = (event) => {
+    statusEl.textContent = `❌ Error: ${event.error}`;
+    statusEl.classList.add('error');
+  };
+  
+  recognition.onend = () => {
+    isListening = false;
+    micBtn.classList.remove('recording');
+    stopBtn.style.display = 'none';
+    
+    if (finalTranscript.trim()) {
+      statusEl.textContent = '⏳ Processing...';
+      // Auto-translate when done
+      const sourceLang = inputLangSelect.value;
+      const targetLang = translateLangSelect.value;
+      translateText(finalTranscript.trim(), sourceLang, targetLang);
+      saveToHistory(finalTranscript.trim(), currentTranslation);
+    } else {
+      statusEl.textContent = 'Ready to listen';
+    }
+  };
+} else {
+  statusEl.textContent = '❌ Speech Recognition not supported';
+}
+
+// Text-to-Speech
+function speak(text, lang) {
+  if (!text.trim()) return;
+  
+  if (isSpeaking) {
+    speechSynthesis.cancel();
+    isSpeaking = false;
+    speakBtn.textContent = '🔊 Read Aloud';
+    statusEl.textContent = 'Speech stopped';
+    return;
+  }
+  
+  isSpeaking = true;
+  speakBtn.textContent = '⏸️ Stop Speaking';
+  statusEl.textContent = '🔊 Speaking...';
+  statusEl.classList.add('speaking');
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = lang;
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  
+  utterance.onend = () => {
+    isSpeaking = false;
+    speakBtn.textContent = '🔊 Read Aloud';
+    statusEl.textContent = '✅ Done';
+    statusEl.classList.remove('speaking');
+  };
+  
+  speechSynthesis.speak(utterance);
+}
+
+// Button Controls
+micBtn.addEventListener('click', () => {
+  if (!recognition) return;
+  if (isListening) {
+    recognition.stop();
+  } else {
+    finalTranscript = '';
+    currentTranslation = '';
+    originalText.textContent = 'Listening...';
+    translatedText.textContent = 'Translation will appear...';
+    recognition.language = langCodeMap[inputLangSelect.value];
+    recognition.start();
+  }
+});
+
+stopBtn.addEventListener('click', () => {
+  if (recognition) recognition.stop();
+});
+
+speakBtn.addEventListener('click', () => {
+  const textToSpeak = currentTranslation || finalTranscript;
+  const lang = speakLangSelect.value;
+  speak(textToSpeak, lang);
+});
+
+undoBtn.addEventListener('click', () => {
+  const text = finalTranscript.trim();
+  const words = text.split(/\s+/);
+  if (words.length > 0) {
+    words.pop();
+    finalTranscript = words.join(' ') + ' ';
+    originalText.textContent = finalTranscript;
+    autoSave();
+  }
+});
+
+copyBtn.addEventListener('click', () => {
+  const text = currentTranslation || finalTranscript;
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = copyBtn.textContent;
+    copyBtn.textContent = '✓ Copied!';
+    setTimeout(() => copyBtn.textContent = orig, 1500);
+  });
+});
+
+clearBtn.addEventListener('click', () => {
+  if (confirm('Clear all text?')) {
+    finalTranscript = '';
+    currentTranslation = '';
+    originalText.textContent = 'Click mic and speak...';
+    translatedText.textContent = 'Translation will appear...';
+    statusEl.textContent = 'Text cleared';
+  }
+});
+
+downloadBtn.addEventListener('click', () => {
+  const text = `ORIGINAL:\n${finalTranscript}\n\nTRANSLATED:\n${currentTranslation}`;
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `dictation-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+inputLangSelect.addEventListener('change', () => {
+  if (recognition && !isListening) {
+    recognition.language = langCodeMap[inputLangSelect.value];
+  }
+});
+
+translateLangSelect.addEventListener('change', async () => {
+  if (finalTranscript.trim()) {
+    await translateText(finalTranscript.trim(), inputLangSelect.value, translateLangSelect.value);
+  }
+});
+
+// Auto-Save
+function autoSave() {
+  lastSaveTime = new Date();
+  autoSaveStatus.textContent = `Last saved: ${lastSaveTime.toLocaleTimeString('de-AT')}`;
+}
+
+// History Management
+function saveToHistory(original, translated) {
+  if (!original.trim()) return;
+  
+  history.unshift({
+    original: original.substring(0, 200),
+    translated: translated.substring(0, 200),
+    fullOriginal: original,
+    fullTranslated: translated,
+    date: new Date().toLocaleString('de-AT')
+  });
+  history = history.slice(0, 30);
+  localStorage.setItem('dictationHistory', JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const historyList = document.getElementById('historyList');
+  if (history.length === 0) {
+    historyList.innerHTML = '<div class="empty-history">No saved dictations yet</div>';
+    return;
+  }
+  
+  historyList.innerHTML = history.map(item => `
+    <div class="history-item">
+      <div class="text-section-label">📝 Original</div>
+      <div class="history-text">${item.original}</div>
+      <div class="text-section-label" style="margin-top:8px">🌐 Translation</div>
+      <div class="history-text">${item.translated}</div>
+      <div class="history-time">${item.date}</div>
+    </div>
+  `).join('');
+}
+
+// PWA Setup
+if ('serviceWorker' in navigator) {
+  const swCode = `
+const CACHE = 'dictation-translate-v1';
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./']).catch(()=>{})));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+});`;
+  
+  const swBlob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl).catch(() => {});
+}
+
+// Initial render
+renderHistory();
+</script>
+
+</body>
+</html>
