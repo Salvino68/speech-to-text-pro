@@ -694,6 +694,9 @@ const state = {
   recognition: null,
   isListening: false,
   isPaused: false,
+  shouldReconnect: false,
+  reconnectTimer: null,
+  reconnectAttempts: 0,
   finalTranscript: '',
   currentTranslation: '',
   isSpeaking: false,
@@ -843,6 +846,7 @@ function setupRecognition() {
   
   rec.onstart = function() {
     state.isListening = true;
+    state.reconnectAttempts = 0;
     const mic = $('micBtn');
     if (mic) mic.classList.add('recording');
     showRecordingControls(true);
@@ -873,10 +877,32 @@ function setupRecognition() {
   
   rec.onend = function() {
     state.isListening = false;
+
+    if (state.shouldReconnect && !state.isPaused) {
+      const delay = Math.min(300 * Math.pow(2, state.reconnectAttempts), 3000);
+      state.reconnectAttempts++;
+      setStatus('◆ Reconnecting…', 'paused');
+      state.reconnectTimer = setTimeout(function() {
+        if (!state.shouldReconnect || state.isPaused) return;
+        try {
+          state.recognition.start();
+        } catch (e) {
+          console.warn('Reconnect error:', e);
+          state.shouldReconnect = false;
+          state.reconnectAttempts = 0;
+          const mic = $('micBtn');
+          if (mic) mic.classList.remove('recording');
+          showRecordingControls(false);
+          setStatus('◆ Reconnect failed', 'error');
+        }
+      }, delay);
+      return;
+    }
+
     const mic = $('micBtn');
     if (mic) mic.classList.remove('recording');
     showRecordingControls(false);
-    
+
     if (!state.isPaused && state.finalTranscript.trim()) {
       finishRecording();
     } else if (!state.isPaused) {
@@ -897,20 +923,27 @@ function startRecording() {
   updateOriginalText('');
   updateTranslatedText('');
   state.isPaused = false;
+  state.shouldReconnect = true;
+  state.reconnectAttempts = 0;
+  if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
   showPauseMenu(false);
-  
+
   const inputSel = $('inputLangSelect');
   if (inputSel) state.recognition.lang = LANG_MAP[inputSel.value] || 'de-AT';
-  
+
   try {
     state.recognition.start();
   } catch (e) {
     console.warn('Start error:', e);
+    state.shouldReconnect = false;
     setStatus('◆ Cannot start', 'error');
   }
 }
 
 function stopRecording() {
+  state.shouldReconnect = false;
+  state.reconnectAttempts = 0;
+  if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
   if (state.recognition && state.isListening) {
     try { state.recognition.stop(); } catch (e) { console.warn(e); }
   }
@@ -919,6 +952,8 @@ function stopRecording() {
 function pauseRecording() {
   if (!state.recognition || !state.isListening) return;
   try {
+    state.shouldReconnect = false;
+    if (state.reconnectTimer) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
     state.recognition.stop();
     state.isListening = false;
     state.isPaused = true;
@@ -935,17 +970,20 @@ function pauseRecording() {
 function resumeRecording() {
   if (!state.recognition) return;
   state.isPaused = false;
+  state.shouldReconnect = true;
+  state.reconnectAttempts = 0;
   showPauseMenu(false);
   showRecordingControls(true);
   setStatus('◆ Resuming...', 'listening');
-  
+
   const inputSel = $('inputLangSelect');
   if (inputSel) state.recognition.lang = LANG_MAP[inputSel.value] || 'de-AT';
-  
+
   try {
     state.recognition.start();
   } catch (e) {
     console.warn('Resume error:', e);
+    state.shouldReconnect = false;
     setStatus('◆ Cannot resume', 'error');
   }
 }
