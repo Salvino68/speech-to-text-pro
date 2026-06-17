@@ -511,6 +511,40 @@ body {
   padding: 32px 20px;
 }
 
+.history-item-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.history-action-btn {
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--border-light);
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  -webkit-appearance: none;
+}
+
+.history-action-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.history-action-btn.delete:hover {
+  border-color: rgba(224,127,127,0.5);
+  color: var(--danger);
+  background: rgba(224,127,127,0.08);
+}
+
 /* ═══════ FOOTER ═══════ */
 .footer {
   text-align: center;
@@ -1128,13 +1162,38 @@ function renderHistory() {
     return;
   }
   
-  list.innerHTML = state.history.map(function(item) {
+  list.innerHTML = state.history.map(function(item, index) {
     return '<div class="history-item">' +
            '<div class="original">' + escapeHtml(item.original) + '</div>' +
            (item.translated ? '<div class="translated">' + escapeHtml(item.translated) + '</div>' : '') +
            '<div class="meta">◆ ' + escapeHtml(item.date) + '</div>' +
+           '<div class="history-item-actions">' +
+             '<button class="history-action-btn" data-action="use" data-index="' + index + '">↺ USE</button>' +
+             '<button class="history-action-btn delete" data-action="delete" data-index="' + index + '">🗑 DELETE</button>' +
+           '</div>' +
            '</div>';
   }).join('');
+}
+
+function deleteHistoryItem(index) {
+  state.history.splice(index, 1);
+  try {
+    localStorage.setItem('drAndreasDictationHistory', JSON.stringify(state.history));
+  } catch (e) {
+    console.warn('Could not save history:', e);
+  }
+  renderHistory();
+}
+
+function useHistoryItem(index) {
+  const item = state.history[index];
+  if (!item) return;
+  state.finalTranscript = item.original;
+  state.currentTranslation = item.translated || '';
+  updateOriginalText(state.finalTranscript);
+  updateTranslatedText(state.currentTranslation);
+  setStatus('◆ Loaded from history', 'listening');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function escapeHtml(text) {
@@ -1213,6 +1272,21 @@ function bindEvents() {
       if (inputSel) translateText(state.finalTranscript.trim(), inputSel.value, translateSel.value);
     }
   });
+
+  const historyList = $('historyList');
+  if (historyList) {
+    historyList.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const index = parseInt(btn.dataset.index, 10);
+      if (isNaN(index)) return;
+      if (btn.dataset.action === 'delete') {
+        deleteHistoryItem(index);
+      } else if (btn.dataset.action === 'use') {
+        useHistoryItem(index);
+      }
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
