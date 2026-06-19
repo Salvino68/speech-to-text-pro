@@ -379,6 +379,88 @@ body {
   margin-bottom: 18px;
 }
 
+/* ═══════ GIGCOM SECTION ═══════ */
+.gigcom-section {
+  margin: 28px 0;
+  padding: 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.gigcom-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.gigcom-input-wrap {
+  flex: 1;
+  min-width: 180px;
+}
+
+.gigcom-input-wrap label {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.gigcom-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+
+.gigcom-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.gigcom-input::placeholder { color: var(--text-muted); }
+
+.gigcom-status {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  display: none;
+}
+
+.gigcom-status.ok {
+  display: block;
+  background: rgba(94,184,142,0.08);
+  border: 1px solid rgba(94,184,142,0.2);
+  color: var(--success);
+}
+
+.gigcom-status.err {
+  display: block;
+  background: rgba(224,127,127,0.08);
+  border: 1px solid rgba(224,127,127,0.2);
+  color: var(--danger);
+}
+
+.gigcom-status.sending {
+  display: block;
+  background: rgba(123,163,217,0.08);
+  border: 1px solid rgba(123,163,217,0.2);
+  color: var(--info);
+}
+
 /* ═══════ LANGUAGE SECTION ═══════ */
 .lang-section {
   margin: 28px 0;
@@ -617,6 +699,24 @@ body {
 
   <div class="auto-save" id="autoSave">Auto-save enabled · Last saved: never</div>
 
+  <!-- Gigcom Server -->
+
+  <section class="gigcom-section">
+    <div class="lang-section-title">Gigcom Server · /obunter</div>
+    <div class="gigcom-row">
+      <div class="gigcom-input-wrap">
+        <label>◆ Server URL</label>
+        <input type="url" id="gigcomUrl" class="gigcom-input"
+               placeholder="http://100.108.47.99"
+               autocomplete="off" autocorrect="off" spellcheck="false"/>
+      </div>
+      <button class="btn" id="gigcomTestBtn" style="flex:0;white-space:nowrap">
+        <span class="icon">⇄</span>TEST
+      </button>
+    </div>
+    <div class="gigcom-status" id="gigcomStatus"></div>
+  </section>
+
   <!-- Language Settings -->
 
   <section class="lang-section">
@@ -685,6 +785,71 @@ body {
 // ═══════════════════════════════════════════════════════════
 function $(id) {
   return document.getElementById(id);
+}
+
+// ═══════════════════════════════════════════════════════════
+// GIGCOM SERVER
+// ═══════════════════════════════════════════════════════════
+const GIGCOM_PATH = '/obunter';
+
+function gigcomSetStatus(msg, type) {
+  const el = $('gigcomStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'gigcom-status ' + (type || '');
+}
+
+function gigcomGetUrl() {
+  const el = $('gigcomUrl');
+  return el ? el.value.trim().replace(/\/$/, '') : '';
+}
+
+async function sendToGigcom(payload) {
+  const base = gigcomGetUrl();
+  if (!base) return;
+  gigcomSetStatus('◆ Sending to Gigcom...', 'sending');
+  try {
+    const res = await fetch(base + GIGCOM_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      gigcomSetStatus('◆ Sent to Gigcom · ' + new Date().toLocaleTimeString('de-AT'), 'ok');
+    } else {
+      gigcomSetStatus('◆ Server error ' + res.status, 'err');
+    }
+  } catch (err) {
+    gigcomSetStatus('◆ Connection failed: ' + err.message, 'err');
+  }
+}
+
+async function testGigcomConnection() {
+  const base = gigcomGetUrl();
+  if (!base) { gigcomSetStatus('◆ Bitte Server URL eingeben', 'err'); return; }
+  gigcomSetStatus('◆ Verbinde mit ' + base + GIGCOM_PATH + '...', 'sending');
+  try {
+    const res = await fetch(base + GIGCOM_PATH, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: true, source: 'DrAndreasDictation' })
+    });
+    gigcomSetStatus('◆ Verbunden · HTTP ' + res.status, res.ok ? 'ok' : 'err');
+  } catch (err) {
+    gigcomSetStatus('◆ Nicht erreichbar: ' + err.message, 'err');
+  }
+}
+
+function saveGigcomUrl() {
+  try { localStorage.setItem('gigcomServerUrl', gigcomGetUrl()); } catch (e) {}
+}
+
+function loadGigcomUrl() {
+  try {
+    const saved = localStorage.getItem('gigcomServerUrl');
+    const el = $('gigcomUrl');
+    if (el) el.value = saved || 'http://100.108.47.99';
+  } catch (e) {}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -972,12 +1137,20 @@ function finishRecording() {
   state.isPaused = false;
   showPauseMenu(false);
   showRecordingControls(false);
-  
+
   if (state.finalTranscript.trim()) {
     const inputSel = $('inputLangSelect');
     const translateSel = $('translateLangSelect');
     if (inputSel && translateSel) {
-      translateText(state.finalTranscript.trim(), inputSel.value, translateSel.value);
+      translateText(state.finalTranscript.trim(), inputSel.value, translateSel.value).then(function() {
+        sendToGigcom({
+          original: state.finalTranscript.trim(),
+          translated: state.currentTranslation,
+          inputLang: inputSel ? inputSel.value : '',
+          translateLang: translateSel ? translateSel.value : '',
+          date: new Date().toISOString()
+        });
+      });
     }
     saveToHistory(state.finalTranscript.trim());
     setStatus('◆ Done', 'listening');
@@ -1197,6 +1370,12 @@ function bindEvents() {
     if (confirm('Clear everything?')) clearAll();
   });
   
+  const gigcomTestBtn = $('gigcomTestBtn');
+  if (gigcomTestBtn) gigcomTestBtn.addEventListener('click', testGigcomConnection);
+
+  const gigcomUrlInput = $('gigcomUrl');
+  if (gigcomUrlInput) gigcomUrlInput.addEventListener('change', saveGigcomUrl);
+
   const inputSel = $('inputLangSelect');
   if (inputSel) inputSel.addEventListener('change', function() {
     updateLangBadges();
@@ -1224,6 +1403,7 @@ function init() {
     bindEvents();
     updateLangBadges();
     renderHistory();
+    loadGigcomUrl();
     setStatus('Ready to record');
   } catch (e) {
     console.error('Init error:', e);
