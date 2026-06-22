@@ -511,6 +511,91 @@ body {
   padding: 32px 20px;
 }
 
+/* ═══════ REMOTE CONTROL / KEYBOARD SHORTCUTS ═══════ */
+.remote-control {
+  margin: 28px 0;
+  padding: 22px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.remote-control-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+
+.remote-control-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  transition: border-color 0.2s;
+}
+
+.shortcut-item.active-shortcut {
+  border-color: var(--accent-dim);
+  background: rgba(201,169,110,0.04);
+}
+
+.shortcut-key {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  background: rgba(201,169,110,0.1);
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  padding: 3px 7px;
+  white-space: nowrap;
+  letter-spacing: 0.05em;
+  min-width: 44px;
+  text-align: center;
+}
+
+.shortcut-desc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.remote-status {
+  margin-top: 14px;
+  padding: 9px 13px;
+  background: rgba(123,163,217,0.05);
+  border: 1px solid rgba(123,163,217,0.15);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--info);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
 /* ═══════ FOOTER ═══════ */
 .footer {
   text-align: center;
@@ -537,6 +622,7 @@ body {
 @media (max-width: 640px) {
   .mic-btn { width: 110px; height: 110px; font-size: 38px; }
   .lang-grid { grid-template-columns: 1fr; gap: 10px; }
+  .shortcuts-grid { grid-template-columns: 1fr; }
   .text-card { padding: 18px; }
   .text-card-content { font-size: 15px; }
   .btn { min-width: 70px; font-size: 10px; padding: 10px 12px; }
@@ -659,6 +745,40 @@ body {
         </select>
       </div>
     </div>
+  </section>
+
+  <!-- Remote Control / Keyboard Shortcuts -->
+
+  <section class="remote-control">
+    <div class="remote-control-title">Remote Control</div>
+    <div class="remote-control-sub">Keyboard · Foot Pedal · Hands-Free</div>
+    <div class="shortcuts-grid">
+      <div class="shortcut-item" id="sc-space">
+        <span class="shortcut-key">SPACE</span>
+        <span class="shortcut-desc">Start / Stop</span>
+      </div>
+      <div class="shortcut-item" id="sc-p">
+        <span class="shortcut-key">P</span>
+        <span class="shortcut-desc">Pause / Resume</span>
+      </div>
+      <div class="shortcut-item" id="sc-enter">
+        <span class="shortcut-key">ENTER</span>
+        <span class="shortcut-desc">Finish &amp; Translate</span>
+      </div>
+      <div class="shortcut-item" id="sc-esc">
+        <span class="shortcut-key">ESC</span>
+        <span class="shortcut-desc">Cancel / Clear</span>
+      </div>
+      <div class="shortcut-item" id="sc-z">
+        <span class="shortcut-key">CTRL+Z</span>
+        <span class="shortcut-desc">Undo Word</span>
+      </div>
+      <div class="shortcut-item" id="sc-s">
+        <span class="shortcut-key">CTRL+S</span>
+        <span class="shortcut-desc">Save / Download</span>
+      </div>
+    </div>
+    <div class="remote-status" id="remoteStatus">◆ Keyboard control active · Ready</div>
   </section>
 
   <!-- History -->
@@ -1216,12 +1336,102 @@ function bindEvents() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// REMOTE CONTROL — KEYBOARD SHORTCUTS
+// ═══════════════════════════════════════════════════════════
+function flashShortcut(id) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.add('active-shortcut');
+  setTimeout(function() { el.classList.remove('active-shortcut'); }, 300);
+}
+
+function setRemoteStatus(text) {
+  const el = $('remoteStatus');
+  if (el) el.textContent = '◆ ' + text;
+}
+
+function bindKeyboardRemote() {
+  document.addEventListener('keydown', function(e) {
+    const tag = document.activeElement ? document.activeElement.tagName : '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (e.code === 'Space') {
+      e.preventDefault();
+      flashShortcut('sc-space');
+      if (state.isListening) {
+        stopRecording();
+        setRemoteStatus('Stopped via keyboard');
+      } else {
+        startRecording();
+        setRemoteStatus('Recording via keyboard');
+      }
+      return;
+    }
+
+    if (e.code === 'KeyP' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      flashShortcut('sc-p');
+      if (state.isPaused) {
+        resumeRecording();
+        setRemoteStatus('Resumed via keyboard');
+      } else if (state.isListening) {
+        pauseRecording();
+        setRemoteStatus('Paused via keyboard');
+      }
+      return;
+    }
+
+    if (e.code === 'Enter' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      flashShortcut('sc-enter');
+      if (state.isPaused || state.isListening) {
+        if (state.isListening) stopRecording();
+        else finishRecording();
+        setRemoteStatus('Finished via keyboard');
+      }
+      return;
+    }
+
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      flashShortcut('sc-esc');
+      if (state.isListening || state.isPaused) {
+        stopRecording();
+        state.isPaused = false;
+        showPauseMenu(false);
+        setRemoteStatus('Cancelled via keyboard');
+      }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      if (!state.isListening && state.finalTranscript) {
+        e.preventDefault();
+        flashShortcut('sc-z');
+        undoLastWord();
+        setRemoteStatus('Undo via keyboard');
+      }
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.code === 'KeyS') {
+      e.preventDefault();
+      flashShortcut('sc-s');
+      downloadText();
+      setRemoteStatus('Saved via keyboard');
+      return;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════
 function init() {
   try {
     state.recognition = setupRecognition();
     bindEvents();
+    bindKeyboardRemote();
     updateLangBadges();
     renderHistory();
     setStatus('Ready to record');
