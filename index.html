@@ -814,6 +814,7 @@ const state = {
   recognition: null,
   isListening: false,
   isPaused: false,
+  userStopped: false,   // true = user explicitly stopped; false = Chrome auto-stopped
   finalTranscript: '',
   currentTranslation: '',
   isSpeaking: false,
@@ -994,9 +995,21 @@ function setupRecognition() {
   rec.onend = function() {
     state.isListening = false;
     const mic = $('micBtn');
+
+    // Chrome auto-stops continuous recognition (silence, timeout, network).
+    // If the user didn't explicitly stop, restart transparently.
+    if (!state.userStopped && !state.isPaused) {
+      try {
+        state.recognition.start();
+        return; // keep recording — don't update UI
+      } catch (e) {
+        // start() failed (e.g. recognition already starting); fall through to stop UI
+      }
+    }
+
     if (mic) mic.classList.remove('recording');
     showRecordingControls(false);
-    
+
     if (!state.isPaused && state.finalTranscript.trim()) {
       finishRecording();
     } else if (!state.isPaused) {
@@ -1014,6 +1027,7 @@ function startRecording() {
   if (!state.recognition) return;
   state.finalTranscript = '';
   state.currentTranslation = '';
+  state.userStopped = false;
   updateOriginalText('');
   updateTranslatedText('');
   state.isPaused = false;
@@ -1031,6 +1045,7 @@ function startRecording() {
 }
 
 function stopRecording() {
+  state.userStopped = true;
   if (state.recognition && state.isListening) {
     try { state.recognition.stop(); } catch (e) { console.warn(e); }
   }
@@ -1039,6 +1054,7 @@ function stopRecording() {
 function pauseRecording() {
   if (!state.recognition || !state.isListening) return;
   try {
+    state.userStopped = true;
     state.recognition.stop();
     state.isListening = false;
     state.isPaused = true;
@@ -1055,6 +1071,7 @@ function pauseRecording() {
 function resumeRecording() {
   if (!state.recognition) return;
   state.isPaused = false;
+  state.userStopped = false;
   showPauseMenu(false);
   showRecordingControls(true);
   setStatus('◆ Resuming...', 'listening');
@@ -1271,6 +1288,7 @@ function bindEvents() {
   const micBtn = $('micBtn');
   if (micBtn) {
     micBtn.addEventListener('click', function() {
+      this.blur(); // prevent Space key from double-triggering button + keyboard handler
       if (state.isListening) stopRecording();
       else startRecording();
     });
