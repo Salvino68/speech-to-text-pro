@@ -511,6 +511,105 @@ body {
   padding: 32px 20px;
 }
 
+/* ═══════ HERMES BRIDGE ═══════ */
+.hermes-bridge {
+  margin: 28px 0;
+  padding: 22px;
+  background: linear-gradient(145deg, #0f0f1a 0%, #12121a 100%);
+  border: 1px solid #2a1f4a;
+  border-radius: 16px;
+}
+
+.hermes-title {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  margin-bottom: 4px;
+  color: #a78bfa;
+}
+
+.hermes-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.hermes-url-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.hermes-url-input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid #2a1f4a;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.hermes-url-input:focus { border-color: #a78bfa; }
+.hermes-url-input::placeholder { color: var(--text-muted); }
+
+.hermes-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.hermes-dot.online  { background: var(--success); box-shadow: 0 0 6px rgba(94,184,142,0.6); }
+.hermes-dot.offline { background: var(--danger); }
+.hermes-dot.checking { background: var(--warning); animation: mic-pulse 1s ease-in-out infinite; }
+
+.hermes-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn.hermes {
+  background: rgba(167,139,250,0.08);
+  border-color: #4a3a7a;
+  color: #a78bfa;
+}
+.btn.hermes:hover:not(:disabled) {
+  background: rgba(167,139,250,0.18);
+  border-color: #a78bfa;
+  color: #c4b5fd;
+  transform: translateY(-1px);
+}
+.btn.hermes.active-hermes {
+  background: linear-gradient(135deg, #4a3a7a, #7c3aed);
+  border-color: #a78bfa;
+  color: #fff;
+}
+
+.hermes-log {
+  margin-top: 12px;
+  padding: 10px 13px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid #1a1a2e;
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #a78bfa;
+  letter-spacing: 0.06em;
+  min-height: 22px;
+  text-align: center;
+}
+
 /* ═══════ REMOTE CONTROL / KEYBOARD SHORTCUTS ═══════ */
 .remote-control {
   margin: 28px 0;
@@ -623,6 +722,7 @@ body {
   .mic-btn { width: 110px; height: 110px; font-size: 38px; }
   .lang-grid { grid-template-columns: 1fr; gap: 10px; }
   .shortcuts-grid { grid-template-columns: 1fr; }
+  .hermes-btn-row { grid-template-columns: 1fr 1fr; }
   .text-card { padding: 18px; }
   .text-card-content { font-size: 15px; }
   .btn { min-width: 70px; font-size: 10px; padding: 10px 12px; }
@@ -702,6 +802,30 @@ body {
   </div>
 
   <div class="auto-save" id="autoSave">Auto-save enabled · Last saved: never</div>
+
+  <!-- Hermes Bridge -->
+
+  <section class="hermes-bridge">
+    <div class="hermes-title">Hermes Bridge</div>
+    <div class="hermes-sub">AI_Pipeline · Lokaler Server · Dauerverbindung</div>
+
+    <div class="hermes-url-row">
+      <div class="hermes-dot" id="hermesDot"></div>
+      <input class="hermes-url-input" id="hermesUrl"
+             placeholder="http://100.x.x.x:8000"
+             value="" autocomplete="off" spellcheck="false"/>
+      <button class="btn hermes" id="hermesPingBtn" style="flex:0;min-width:64px;font-size:9px">PING</button>
+    </div>
+
+    <div class="hermes-btn-row">
+      <button class="btn hermes" id="hermesStartAllBtn"><span class="icon">⚡</span>START ALL</button>
+      <button class="btn hermes" id="hermesSendBtn"><span class="icon">→</span>SEND TEXT</button>
+      <button class="btn hermes" id="hermesVoiceCmdBtn"><span class="icon">🎙</span>VOICE CMD</button>
+      <button class="btn hermes" id="hermesSyncBtn"><span class="icon">⟳</span>SYNC</button>
+    </div>
+
+    <div class="hermes-log" id="hermesLog">◆ Hermes nicht verbunden</div>
+  </section>
 
   <!-- Language Settings -->
 
@@ -1354,6 +1478,141 @@ function bindEvents() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// HERMES BRIDGE
+// ═══════════════════════════════════════════════════════════
+const HERMES_URL_KEY = 'hermesBaseUrl';
+
+function hermesUrl() {
+  const input = $('hermesUrl');
+  return (input ? input.value.trim() : '') || localStorage.getItem(HERMES_URL_KEY) || '';
+}
+
+function hermesLog(msg, color) {
+  const el = $('hermesLog');
+  if (!el) return;
+  el.textContent = '◆ ' + msg;
+  el.style.color = color || '#a78bfa';
+}
+
+function hermesDot(state) {
+  const dot = $('hermesDot');
+  if (!dot) return;
+  dot.className = 'hermes-dot ' + (state || '');
+}
+
+async function hermesPing() {
+  const base = hermesUrl();
+  if (!base) { hermesLog('Keine URL — bitte Tailscale-IP eingeben', '#e07f7f'); return; }
+  hermesDot('checking');
+  hermesLog('Verbinde…', '#e0b06f');
+  try {
+    const r = await fetch(base + '/health', { method: 'GET', signal: AbortSignal.timeout(4000) });
+    if (r.ok) {
+      hermesDot('online');
+      hermesLog('Verbunden · ' + base, '#5eb88e');
+      localStorage.setItem(HERMES_URL_KEY, base);
+    } else {
+      // /health fehlt — versuche root
+      hermesDot('online');
+      hermesLog('Erreichbar (Status ' + r.status + ')', '#e0b06f');
+      localStorage.setItem(HERMES_URL_KEY, base);
+    }
+  } catch (e) {
+    hermesDot('offline');
+    hermesLog('Nicht erreichbar: ' + e.message, '#e07f7f');
+  }
+}
+
+async function hermesPost(endpoint, payload) {
+  const base = hermesUrl();
+  if (!base) { hermesLog('Keine URL konfiguriert', '#e07f7f'); return null; }
+  try {
+    hermesDot('checking');
+    const r = await fetch(base + endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8000)
+    });
+    const data = await r.json().catch(() => ({}));
+    hermesDot('online');
+    localStorage.setItem(HERMES_URL_KEY, base);
+    return { status: r.status, data };
+  } catch (e) {
+    hermesDot('offline');
+    hermesLog('Fehler: ' + e.message, '#e07f7f');
+    return null;
+  }
+}
+
+async function hermesStartAll() {
+  hermesLog('Starte Hermes Stack…', '#e0b06f');
+  const res = await hermesPost('/api/voice/command', { command: 'hermes_start_all', source: 'speech-to-text-pro' });
+  if (res) hermesLog('Start All → ' + (res.data.status || res.data.message || 'OK') , '#5eb88e');
+}
+
+async function hermesSendText() {
+  const text = state.currentTranslation || state.finalTranscript;
+  if (!text) { hermesLog('Kein Text zum Senden', '#e07f7f'); return; }
+  hermesLog('Sende Diktat…', '#e0b06f');
+  const res = await hermesPost('/api/voice/command', {
+    command: 'dictation',
+    text: text,
+    source: 'speech-to-text-pro',
+    lang: $('inputLangSelect') ? $('inputLangSelect').value : 'de'
+  });
+  if (res) hermesLog('Gesendet ✓ — ' + text.substring(0, 40) + '…', '#5eb88e');
+}
+
+async function hermesVoiceCmd() {
+  const text = state.finalTranscript.trim();
+  if (!text) { hermesLog('Kein Text — erst diktieren', '#e07f7f'); return; }
+  hermesLog('Voice Command → Hermes…', '#e0b06f');
+  const res = await hermesPost('/api/voice/command', {
+    command: 'voice_intent',
+    text: text,
+    source: 'speech-to-text-pro'
+  });
+  if (res) hermesLog('Intent → ' + JSON.stringify(res.data).substring(0, 60), '#5eb88e');
+}
+
+async function hermesMemorySync() {
+  hermesLog('Memory Sync…', '#e0b06f');
+  const res = await hermesPost('/hermes_memory_sync', { source: 'speech-to-text-pro', ts: Date.now() });
+  if (res) hermesLog('Sync ✓', '#5eb88e');
+}
+
+function bindHermesBridge() {
+  // URL aus localStorage laden
+  const saved = localStorage.getItem(HERMES_URL_KEY);
+  const input = $('hermesUrl');
+  if (saved && input) input.value = saved;
+
+  // URL speichern bei Eingabe
+  if (input) input.addEventListener('change', function() {
+    localStorage.setItem(HERMES_URL_KEY, this.value.trim());
+  });
+
+  const pingBtn = $('hermesPingBtn');
+  if (pingBtn) pingBtn.addEventListener('click', hermesPing);
+
+  const startBtn = $('hermesStartAllBtn');
+  if (startBtn) startBtn.addEventListener('click', hermesStartAll);
+
+  const sendBtn = $('hermesSendBtn');
+  if (sendBtn) sendBtn.addEventListener('click', hermesSendText);
+
+  const voiceBtn = $('hermesVoiceCmdBtn');
+  if (voiceBtn) voiceBtn.addEventListener('click', hermesVoiceCmd);
+
+  const syncBtn = $('hermesSyncBtn');
+  if (syncBtn) syncBtn.addEventListener('click', hermesMemorySync);
+
+  // Auto-ping beim Start wenn URL bekannt
+  if (saved) setTimeout(hermesPing, 1000);
+}
+
+// ═══════════════════════════════════════════════════════════
 // REMOTE CONTROL — KEYBOARD SHORTCUTS
 // ═══════════════════════════════════════════════════════════
 function flashShortcut(id) {
@@ -1449,6 +1708,7 @@ function init() {
   try {
     state.recognition = setupRecognition();
     bindEvents();
+    bindHermesBridge();
     bindKeyboardRemote();
     updateLangBadges();
     renderHistory();
