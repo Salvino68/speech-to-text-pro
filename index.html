@@ -939,6 +939,7 @@ const state = {
   isListening: false,
   isPaused: false,
   userStopped: false,   // true = user explicitly stopped; false = Chrome auto-stopped
+  isRestarting: false,  // guard against double-restart in onend
   finalTranscript: '',
   currentTranslation: '',
   isSpeaking: false,
@@ -1121,14 +1122,22 @@ function setupRecognition() {
     const mic = $('micBtn');
 
     // Chrome auto-stops continuous recognition (silence, timeout, network).
-    // If the user didn't explicitly stop, restart transparently.
-    if (!state.userStopped && !state.isPaused) {
-      try {
-        state.recognition.start();
-        return; // keep recording — don't update UI
-      } catch (e) {
-        // start() failed (e.g. recognition already starting); fall through to stop UI
-      }
+    // Restart after 200ms delay — calling start() synchronously in onend hangs Chrome.
+    if (!state.userStopped && !state.isPaused && !state.isRestarting) {
+      state.isRestarting = true;
+      setTimeout(function() {
+        state.isRestarting = false;
+        if (!state.userStopped && !state.isPaused) {
+          try { state.recognition.start(); } catch(e) {
+            // Restart failed — fall through to stopped UI
+            if (mic) mic.classList.remove('recording');
+            showRecordingControls(false);
+            if (state.finalTranscript.trim()) finishRecording();
+            else setStatus('Ready to record');
+          }
+        }
+      }, 200);
+      return; // keep UI in recording state while we wait
     }
 
     if (mic) mic.classList.remove('recording');
@@ -1170,6 +1179,7 @@ function startRecording() {
 
 function stopRecording() {
   state.userStopped = true;
+  state.isRestarting = false;
   if (state.recognition && state.isListening) {
     try { state.recognition.stop(); } catch (e) { console.warn(e); }
   }
@@ -1494,10 +1504,10 @@ function hermesLog(msg, color) {
   el.style.color = color || '#a78bfa';
 }
 
-function hermesDot(state) {
+function hermesDot(status) {
   const dot = $('hermesDot');
   if (!dot) return;
-  dot.className = 'hermes-dot ' + (state || '');
+  dot.className = 'hermes-dot ' + (status || '');
 }
 
 async function hermesPing() {
