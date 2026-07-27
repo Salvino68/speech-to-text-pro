@@ -1186,10 +1186,11 @@ function stopRecording() {
 }
 
 function pauseRecording() {
-  if (!state.recognition || !state.isListening) return;
+  if (!state.recognition || (!state.isListening && !state.isRestarting)) return;
   try {
     state.userStopped = true;
-    state.recognition.stop();
+    state.isRestarting = false;
+    if (state.isListening) state.recognition.stop();
     state.isListening = false;
     state.isPaused = true;
     const mic = $('micBtn');
@@ -1645,7 +1646,7 @@ function bindKeyboardRemote() {
     if (e.code === 'Space') {
       e.preventDefault();
       flashShortcut('sc-space');
-      if (state.isListening) {
+      if (state.isListening || state.isRestarting) {
         stopRecording();
         setRemoteStatus('Stopped via keyboard');
       } else {
@@ -1661,7 +1662,7 @@ function bindKeyboardRemote() {
       if (state.isPaused) {
         resumeRecording();
         setRemoteStatus('Resumed via keyboard');
-      } else if (state.isListening) {
+      } else if (state.isListening || state.isRestarting) {
         pauseRecording();
         setRemoteStatus('Paused via keyboard');
       }
@@ -1671,9 +1672,8 @@ function bindKeyboardRemote() {
     if (e.code === 'Enter' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       flashShortcut('sc-enter');
-      if (state.isPaused || state.isListening) {
-        if (state.isListening) stopRecording();
-        else finishRecording();
+      if (state.isPaused || state.isListening || state.isRestarting) {
+        stopRecording();
         setRemoteStatus('Finished via keyboard');
       }
       return;
@@ -1682,7 +1682,7 @@ function bindKeyboardRemote() {
     if (e.code === 'Escape') {
       e.preventDefault();
       flashShortcut('sc-esc');
-      if (state.isListening || state.isPaused) {
+      if (state.isListening || state.isRestarting || state.isPaused) {
         stopRecording();
         state.isPaused = false;
         showPauseMenu(false);
